@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>A-BリピートMP3プレーヤー</title>
+<style>
+:root{font-family:system-ui,-apple-system,"Yu Gothic",Meiryo,sans-serif;color-scheme:dark;background:#101824;color:#f0f3f8}*{box-sizing:border-box}body{margin:0;padding:22px 14px}.app{max-width:730px;margin:auto;background:#1b2635;border:1px solid #334257;border-radius:20px;padding:25px;box-shadow:0 12px 36px #0004}h1{font-size:1.5rem;margin:0 0 8px}.desc{color:#aebdd1;font-size:.9rem;margin:0 0 24px}.file-area{border:2px dashed #60758e;border-radius:13px;padding:18px;text-align:center;cursor:pointer;background:#233146}.file-area.drag{border-color:#61cfaa;background:#294b4b}.file-area input{display:none}.filename{margin:18px 0;color:#d5e4f4;overflow-wrap:anywhere;min-height:1.5em}.times{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums;color:#c4d0e0;font-size:.9rem;margin-bottom:7px}.seek-wrap{position:relative;padding:8px 0}.seek{width:100%;accent-color:#6ec8ff;cursor:pointer;height:10px}.ab-track{position:absolute;left:0;right:0;top:0;height:6px;pointer-events:none}.ab-range{position:absolute;top:0;height:5px;background:#e6b75c;border-radius:10px;opacity:.95}.controls{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:18px}button{border:1px solid #60748b;color:#f8fbff;background:#344761;border-radius:12px;padding:15px 8px;font-size:1.08rem;font-weight:700;cursor:pointer;touch-action:manipulation}button:hover{background:#425b78}button:focus-visible,.file-area:focus-visible{outline:3px solid #86c8ff}button:disabled{opacity:.45;cursor:not-allowed}.primary{background:#1c8cbd;border-color:#4db4de}.ab-buttons{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:14px}.ab-buttons button{background:#4d3f31;border-color:#917150}.ab-buttons button.active{background:#946c27;border-color:#eab95a}.markers{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;color:#c7d5e5;font-size:.95rem}.markers strong{font-variant-numeric:tabular-nums;color:#f7c975}.options{display:flex;align-items:center;flex-wrap:wrap;gap:12px;margin-top:23px;padding-top:18px;border-top:1px solid #34445a}.options label{color:#cbd8e9}select{font-size:1rem;border-radius:8px;padding:9px;color:white;background:#304057;border:1px solid #66768b}.secondary{font-size:.9rem;padding:10px 14px;margin-left:auto}.status{font-size:.86rem;min-height:1.3em;margin:16px 0 0;color:#a9d3bf}.help{font-size:.85rem;color:#aab9ca;line-height:1.7;margin-top:18px}@media(max-width:440px){.app{padding:18px 14px}.controls{gap:8px}.controls button{font-size:.96rem;padding:14px 5px}.ab-buttons button{font-size:.97rem}.markers{font-size:.82rem}}
+</style>
+</head>
+<body>
+<main class="app">
+<h1>ジャズピアノ練習用 MP3プレーヤー</h1>
+<p class="desc">好きなフレーズを指定して、何度でも繰り返し聴けます。</p>
+<label class="file-area" id="drop" tabindex="0" role="button">MP3を選択 / ここにドラッグ＆ドロップ<input type="file" id="file" accept="audio/mpeg,audio/mp3,audio/*"></label>
+<div class="filename" id="filename">MP3ファイルを読み込んでください。</div>
+<div class="times"><span id="current">0:00.00</span><span id="duration">0:00.00</span></div>
+<div class="seek-wrap"><div class="ab-track"><div class="ab-range" id="abRange" hidden></div></div><input class="seek" id="seek" type="range" min="0" max="1000" step="1" value="0" aria-label="再生位置"></div>
+<div class="controls"><button id="back" disabled>－5秒</button><button class="primary" id="play" disabled>▶ 再生</button><button id="forward" disabled>＋5秒</button></div>
+<div class="ab-buttons"><button id="setA" disabled>A｜開始点を設定</button><button id="setB" disabled>B｜終了点を設定</button></div>
+<div class="markers"><div>開始 A：<strong id="aText">未設定</strong></div><div>終了 B：<strong id="bText">未設定</strong></div></div>
+<div class="options"><label for="speed">再生速度</label><select id="speed"><option value="0.5">0.5倍</option><option value="0.75">0.75倍</option><option value="0.85">0.85倍</option><option value="1" selected>1.0倍</option><option value="1.1">1.1倍</option><option value="1.25">1.25倍</option><option value="1.5">1.5倍</option></select><button class="secondary" id="clear" disabled>A・Bを解除</button></div>
+<div class="status" id="status" role="status">音源はブラウザ内で再生され、外部に送信されません。</div>
+<div class="help">使い方：曲を再生し、繰り返したい部分の始まりで「A」、終わりで「B」を押してください。AからBまでを自動的にリピートします。バーを動かすと、好きな位置へ移動できます。</div>
+<audio id="audio" preload="metadata"></audio>
+</main>
+<script>
+(()=>{
+'use strict';
+const $=id=>document.getElementById(id);
+const audio=$('audio'),seek=$('seek'),play=$('play'),aBtn=$('setA'),bBtn=$('setB');
+let a=null,b=null,url=null,dragging=false;
+const ready=()=>Number.isFinite(audio.duration)&&audio.duration>0;
+const fmt=t=>{if(!Number.isFinite(t))return '0:00.00';const min=Math.floor(t/60),sec=Math.floor(t%60),cs=Math.floor((t%1)*100);return `${min}:${String(sec).padStart(2,'0')}.${String(cs).padStart(2,'0')}`};
+function status(s){$('status').textContent=s}
+function showMarkers(){aBtn.classList.toggle('active',a!==null);bBtn.classList.toggle('active',b!==null);$('aText').textContent=a===null?'未設定':fmt(a);$('bText').textContent=b===null?'未設定':fmt(b);const r=$('abRange');if(ready()&&a!==null&&b!==null){r.hidden=false;r.style.left=(a/audio.duration*100)+'%';r.style.width=((b-a)/audio.duration*100)+'%'}else r.hidden=true}
+function showProgress(){if(!dragging&&ready()){seek.value=String(Math.round(audio.currentTime/audio.duration*1000));$('current').textContent=fmt(audio.currentTime)}$('duration').textContent=fmt(audio.duration)}
+function setEnabled(enabled){for(const id of ['play','back','forward','setA','setB','clear'])$(id).disabled=!enabled}
+function stopObjectUrl(){audio.pause();audio.removeAttribute('src');audio.load();if(url){URL.revokeObjectURL(url);url=null}}
+function loadFile(file){if(!file)return;if(!file.type.startsWith('audio/')&&!/\.(mp3|wav|m4a|ogg|aac|flac)$/i.test(file.name)){status('音声ファイルを選択してください。');return}stopObjectUrl();a=null;b=null;setEnabled(false);showMarkers();seek.value='0';$('current').textContent='0:00.00';$('duration').textContent='0:00.00';$('filename').textContent=file.name;url=URL.createObjectURL(file);audio.src=url;audio.load();status('読み込み中です。')}
+$('file').addEventListener('change',e=>loadFile(e.target.files[0]));
+$('drop').addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();$('file').click()}});
+const drop=$('drop');drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('drag')});drop.addEventListener('dragleave',()=>drop.classList.remove('drag'));drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('drag');loadFile(e.dataTransfer.files[0])});
+audio.addEventListener('loadedmetadata',()=>{setEnabled(ready());showProgress();showMarkers();status(ready()?'準備完了。再生してA・Bを指定してください。':'再生時間を取得できませんでした。')});
+audio.addEventListener('error',()=>{setEnabled(false);status('この音声ファイルを再生できません。別のファイルをお試しください。')});
+audio.addEventListener('play',()=>play.textContent='⏸ 一時停止');audio.addEventListener('pause',()=>play.textContent='▶ 再生');
+function jump(t){if(!ready())return;audio.currentTime=Math.max(0,Math.min(t,audio.duration));showProgress()}
+function loopCheck(){if(!ready())return;if(a!==null&&b!==null&&audio.currentTime>=b-0.025){jump(a);if(audio.paused&&!audio.ended)return;}}
+audio.addEventListener('timeupdate',()=>{loopCheck();showProgress()});
+audio.addEventListener('ended',()=>{if(a!==null&&b!==null){jump(a);audio.play().catch(()=>{})}else{play.textContent='▶ 再生';showProgress()}});
+// 短いフレーズの繰り返し精度を改善するため、描画ごとに終了位置を確認する。
+function tick(){if(!audio.paused)loopCheck();showProgress();requestAnimationFrame(tick)}requestAnimationFrame(tick);
+play.addEventListener('click',async()=>{if(!ready())return;if(!audio.paused){audio.pause();return}if(a!==null&&b!==null&&(audio.currentTime>=b||audio.currentTime<a))jump(a);try{await audio.play()}catch(e){status('再生できませんでした。ブラウザの音声設定をご確認ください。')}});
+$('back').addEventListener('click',()=>jump(audio.currentTime-5));$('forward').addEventListener('click',()=>jump(audio.currentTime+5));
+seek.addEventListener('pointerdown',()=>dragging=true);seek.addEventListener('input',()=>{if(!ready())return;dragging=true;$('current').textContent=fmt(+seek.value/1000*audio.duration);jump(+seek.value/1000*audio.duration)});seek.addEventListener('change',()=>{dragging=false;showProgress()});window.addEventListener('pointerup',()=>{if(dragging){dragging=false;showProgress()}});
+aBtn.addEventListener('click',()=>{if(!ready())return;const t=audio.currentTime;if(b!==null&&t>=b){b=null;status('Aを設定しました。BはAより後に設定してください。')}else status('Aを設定しました。');a=t;showMarkers()});
+bBtn.addEventListener('click',()=>{if(!ready())return;const t=audio.currentTime;if(a===null){status('先にA（開始点）を設定してください。');return}if(t-a<0.1){status('BはAより0.1秒以上後に設定してください。');return}b=t;showMarkers();status('A-Bリピート中です。')});
+$('clear').addEventListener('click',()=>{a=null;b=null;showMarkers();status('A・Bの設定を解除しました。')});
+$('speed').addEventListener('change',e=>{audio.playbackRate=Number(e.target.value);status('再生速度を'+e.target.options[e.target.selectedIndex].text+'に変更しました。')});
+window.addEventListener('beforeunload',()=>{if(url)URL.revokeObjectURL(url)});
+})();
+</script>
+</body>
+</html>
